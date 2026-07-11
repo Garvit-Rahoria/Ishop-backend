@@ -35,7 +35,7 @@ const corsOptions = {
 };
 
 // Handle preflight OPTIONS for all routes before anything else
-app.options("*", cors(corsOptions));
+app.options("/(.*)", cors(corsOptions));
 app.use(cors(corsOptions));
 
 app.use(cookieParser())
