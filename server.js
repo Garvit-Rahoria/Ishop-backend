@@ -7,22 +7,23 @@ const mongoose = require("mongoose")
 const app = express()
 
 // ---------------------------------------------------------------------------
-// CORS — read from env, fall back to known production + local origins
-// On Render: set CORS_ORIGINS=https://swoo-techmart-gilt.vercel.app,http://localhost:3000
+// CORS — read allowed origins from FRONTEND_URL (comma-separated)
+// On Render: set FRONTEND_URL=https://swoo-techmart-gilt.vercel.app
 // ---------------------------------------------------------------------------
-const rawOrigins =
-    process.env.CORS_ORIGINS ||
-    process.env.FRONTEND_URL ||
-    "https://swoo-techmart-gilt.vercel.app,http://localhost:3000";
+const rawOrigins = process.env.FRONTEND_URL || "";
 
-const allowedOrigins = rawOrigins.split(",").map((o) => o.trim()).filter(Boolean);
+const allowedOrigins = rawOrigins
+    .split(",")
+    .map((o) => o.trim().replace(/\/+$/, ""))  // trim whitespace + trailing slashes
+    .filter(Boolean);
 
 console.log("✅ Allowed CORS origins:", allowedOrigins);
 
 const corsOptions = {
     origin: (origin, callback) => {
+        const normalizedOrigin = origin ? origin.trim().replace(/\/+$/, "") : undefined;
         // Allow server-to-server / health-check requests (no origin header)
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!normalizedOrigin || allowedOrigins.includes(normalizedOrigin)) {
             callback(null, true);
         } else {
             console.warn("🚫 CORS blocked origin:", origin);
@@ -34,8 +35,7 @@ const corsOptions = {
     allowedHeaders: ["Content-Type", "Authorization"],
 };
 
-// Handle preflight OPTIONS for all routes before anything else
-app.options("/(.*)", cors(corsOptions));
+// Global CORS middleware — handles preflight OPTIONS automatically
 app.use(cors(corsOptions));
 
 app.use(cookieParser())
@@ -61,8 +61,9 @@ app.get("/", (req, res) => {
 // ---------------------------------------------------------------------------
 app.use((err, req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && allowedOrigins.includes(origin)) {
-        res.setHeader("Access-Control-Allow-Origin", origin);
+    const normalizedOrigin = origin ? origin.trim().replace(/\/+$/, "") : undefined;
+    if (normalizedOrigin && allowedOrigins.includes(normalizedOrigin)) {
+        res.setHeader("Access-Control-Allow-Origin", normalizedOrigin);
         res.setHeader("Access-Control-Allow-Credentials", "true");
     }
     console.error("❌ Server error:", err.message);
