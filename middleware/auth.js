@@ -12,8 +12,13 @@ const protect = async (req, res, next) => {
 
        
         if (!token) {
-            token = req.headers.authorization
-           
+            const authHeader = req.headers.authorization;
+            if (authHeader) {
+                // Support both "Bearer <token>" and raw token
+                token = authHeader.startsWith("Bearer ")
+                    ? authHeader.slice(7)
+                    : authHeader;
+            }
         }
 
         if (!token) {
