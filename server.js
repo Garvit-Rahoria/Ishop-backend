@@ -9,8 +9,18 @@ const app = express()
 app.use(cookieParser())
 app.use(express.static("public"))
 app.use(express.json())
+const rawOrigins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "http://localhost:3000";
+const allowedOrigins = rawOrigins.split(",").map((o) => o.trim()).filter(Boolean);
+
 app.use(cors({
-    origin: "http://localhost:3000",
+    origin: (origin, callback) => {
+        // Allow server-to-server requests (no origin) and listed origins
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error(`CORS blocked: ${origin}`));
+        }
+    },
     credentials: true
 }))
 
