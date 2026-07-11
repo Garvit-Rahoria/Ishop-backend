@@ -111,7 +111,7 @@ const login = async (req, res) => {
         });
 
 
-        return sendSuccess(res, "User Login Successfully!", { id: user._id, name: user.name, email: user.email });
+        return sendSuccess(res, "User Login Successfully!", { id: user._id, name: user.name, email: user.email, token });
 
     } catch (error) {
         const message = error?.message || "Internal Server Error"
