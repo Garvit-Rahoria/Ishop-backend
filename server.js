@@ -7,57 +7,78 @@ const mongoose = require("mongoose")
 const app = express()
 
 // ---------------------------------------------------------------------------
-// CORS — read allowed origins from FRONTEND_URL (comma-separated)
-// On Render: set FRONTEND_URL=https://swoo-techmart-gilt.vercel.app
+// CORS — reads from FRONTEND_URL and/or CORS_ORIGINS (comma-separated)
+// Local dev:   CORS_ORIGINS=http://localhost:3000
+// Production:  FRONTEND_URL=https://swoo-techmart-gilt.vercel.app
 // ---------------------------------------------------------------------------
-const rawOrigins = process.env.FRONTEND_URL || "";
+const rawOrigins = [
+    process.env.FRONTEND_URL  || "",
+    process.env.CORS_ORIGINS  || "",
+    process.env.ADMIN_URL     || "",
+].join(",");
 
-const allowedOrigins = rawOrigins
-    .split(",")
-    .map((o) => o.trim().replace(/\/+$/, ""))  // trim whitespace + trailing slashes
-    .filter(Boolean);
+const allowedOrigins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    ...rawOrigins
+        .split(",")
+        .map((o) => o.trim().replace(/\/+$/, ""))
+        .filter(Boolean),
+].filter((v, i, a) => v && a.indexOf(v) === i); // deduplicate
 
 console.log("✅ Allowed CORS origins:", allowedOrigins);
 
 const corsOptions = {
     origin: (origin, callback) => {
         const normalizedOrigin = origin ? origin.trim().replace(/\/+$/, "") : undefined;
-        // Allow server-to-server / health-check requests (no origin header)
-        if (!normalizedOrigin || allowedOrigins.includes(normalizedOrigin)) {
-            callback(null, true);
-        } else {
-            console.warn("🚫 CORS blocked origin:", origin);
-            callback(new Error(`CORS blocked: ${origin}`));
+        // Allow server-to-server / Postman / health-check (no Origin header)
+        if (!normalizedOrigin) return callback(null, true);
+
+        if (allowedOrigins.includes(normalizedOrigin)) {
+            return callback(null, true);
         }
+
+        console.warn("🚫 CORS blocked origin:", origin);
+        return callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+    ],
+    optionsSuccessStatus: 204,
 };
 
-// Global CORS middleware — handles preflight OPTIONS automatically
+// Apply CORS before everything else — including preflight OPTIONS
 app.use(cors(corsOptions));
+
+// Explicit preflight handler for all routes (required for Express 5 + path-to-regexp v8)
+app.options(/.*/, cors(corsOptions));
 
 app.use(cookieParser())
 app.use(express.static("public"))
 app.use(express.json())
 
 app.use("/api/category", require("./routers/categoryRouter"))
-app.use("/api/brand", require("./routers/brandRouter"))
-app.use("/api/color", require("./routers/colorRouter"))
-app.use("/api/product", require("./routers/productRouter"))
-app.use("/api/user", require("./routers/userRouter"))
-app.use("/api/cart", require("./routers/cartRouter"))
-app.use("/api/order", require("./routers/orderRouter"))
+app.use("/api/brand",    require("./routers/brandRouter"))
+app.use("/api/color",    require("./routers/colorRouter"))
+app.use("/api/product",  require("./routers/productRouter"))
+app.use("/api/user",     require("./routers/userRouter"))
+app.use("/api/cart",     require("./routers/cartRouter"))
+app.use("/api/order",    require("./routers/orderRouter"))
 
-// ✅ Health check
+// Health check
 app.get("/", (req, res) => {
     res.send("API is running ✅")
 })
 
 // ---------------------------------------------------------------------------
-// Global error handler — must be last, always sends CORS headers so browser
-// can read the actual error instead of getting a CORS failure on a 500
+// Global error handler — always re-injects CORS headers so the browser
+// can read the actual error body instead of seeing a CORS failure on 4xx/5xx
 // ---------------------------------------------------------------------------
 app.use((err, req, res, next) => {
     const origin = req.headers.origin;
@@ -76,9 +97,7 @@ app.use((err, req, res, next) => {
 mongoose.connect(process.env.MONGODB_URL)
     .then(() => {
         console.log("✅ Database Connected")
-
         const PORT = process.env.PORT || 10000
-
         app.listen(PORT, "0.0.0.0", () => {
             console.log(`🚀 Server Started on port ${PORT}`)
         })
