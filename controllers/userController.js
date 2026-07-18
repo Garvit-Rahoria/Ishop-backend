@@ -59,7 +59,16 @@ const verifyEmail = async (req, res) => {
         user.otp = undefined;
         user.otpExpire = undefined;
         await user.save();
-        return sendSuccess(res, "Email verified Successfully")
+
+        // Auto-login: generate token so frontend can skip the login step
+        const token = generateToken(user._id);
+
+        return sendSuccess(res, "Email verified Successfully", {
+            id:    user._id,
+            name:  user.name,
+            email: user.email,
+            token,
+        });
 
     } catch (error) {
         return sendServerError(res, error)

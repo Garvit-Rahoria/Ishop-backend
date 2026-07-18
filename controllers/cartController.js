@@ -71,40 +71,40 @@ const syncCart = async (req, res) => {
 const addToCart = async (req, res) => {
     try {
         const userId = req.user._id;
-        const {id,qty} = req.body;
+        const { id, qty = 1 } = req.body;
 
-        let userCart = await cartModel.findOne({ userId })
-            .populate({
-                path: "items.productId",
-                select: "name _id orginal_price final_price discount_percentage price thumbnail stock"
-            });
+        if (!id) {
+            return res.status(400).json({ success: false, message: "Product id is required" });
+        }
+
+        // Find or create cart for this user
+        let userCart = await cartModel.findOne({ userId });
+
+        if (!userCart) {
+            userCart = new cartModel({ userId, items: [] });
+        }
 
         const existingItem = userCart.items.find(
-            (item) => {
-                return item.productId._id == id
-            }
-        )
+            (item) => item.productId.toString() === id.toString()
+        );
 
         if (existingItem) {
             existingItem.qty += qty;
         } else {
-            userCart.items.push({
-                productId: id,
-                qty
-            });
+            userCart.items.push({ productId: id, qty });
         }
 
         await userCart.save();
 
-        res.status(200).json({
-            message: "Cart synced Successfully!",
+        return res.status(200).json({
             success: true,
+            message: "Added to cart",
         });
-
     } catch (error) {
-        console.log(error)
+        console.error("addToCart error:", error);
+        return res.status(500).json({ success: false, message: error.message });
     }
-}
+};
 
 module.exports = {
     syncCart,addToCart
