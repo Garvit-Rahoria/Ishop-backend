@@ -1,16 +1,17 @@
-const productRouter = require("express").Router()
-const { create, read, readById, add_images,delete_image,status,deleteById,update //, getById, 
-} = require("../controllers/productController")
+const productRouter = require("express").Router();
+const { create, read, readById, add_images, delete_image, status, deleteById, update } = require("../controllers/productController");
+const { protect, authorized } = require("../middleware/auth");
+const { uploadSingle, uploadMultiple } = require("../middleware/upload");
 
-const fileUploader = require("express-fileupload")
-productRouter.post("/create", fileUploader({ createParentPath: true }), create)
-productRouter.get("/", read)
-productRouter.get("/:id", readById)
-productRouter.put("/remove_image/:id", delete_image)
-productRouter.post("/add-images/:id",fileUploader({ createParentPath: true }), add_images)
-// productRouter.get("/:id", getById)
-productRouter.patch("/status-update/:id", status)
-productRouter.delete("/delete/:id", deleteById)
-productRouter.put("/update/:id", fileUploader({ createParentPath: true }), update)
+const adminGuard = [protect, authorized("admin", "superAdmin")];
+
+productRouter.post("/create",             ...adminGuard, uploadSingle("thumbnail"),    create);
+productRouter.get("/",                    read);
+productRouter.get("/:id",                 readById);
+productRouter.post("/add-images/:id",     ...adminGuard, uploadMultiple("images", 10), add_images);
+productRouter.put("/remove_image/:id",    ...adminGuard, delete_image);
+productRouter.patch("/status-update/:id", ...adminGuard, status);
+productRouter.delete("/delete/:id",       ...adminGuard, deleteById);
+productRouter.put("/update/:id",          ...adminGuard, uploadSingle("thumbnail"),    update);
 
 module.exports = productRouter;

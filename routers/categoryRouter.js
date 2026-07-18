@@ -1,14 +1,17 @@
-const categoryRouter = require("express").Router()
-const { create, read, getById, status, deleteById, readById, update } = require("../controllers/categoryController")
-const fileUploader = require("express-fileupload")
-const { protect, authorized } = require("../middleware/auth")
+const categoryRouter = require("express").Router();
+const { create, read, getById, status, deleteById, readById, update } = require("../controllers/categoryController");
+const { protect, authorized } = require("../middleware/auth");
+const { uploadSingle } = require("../middleware/upload");
 
-categoryRouter.post("/create", fileUploader({ createParentPath: true }), protect, authorized("admin", "superAdmin"), create)
-categoryRouter.get("/", read)
-categoryRouter.get("/:id", readById)
-categoryRouter.get("/:id", getById)
-categoryRouter.patch("/status-update/:id", protect, authorized("admin", "superAdmin"), status)
-categoryRouter.delete("/delete/:id", protect, authorized("admin", "superAdmin"), deleteById)
-categoryRouter.put("/update/:id", fileUploader({ createParentPath: true }), protect, authorized("admin", "superAdmin"), update)
+// Auth runs first (reads headers only, doesn't need body).
+// Upload runs after auth so we don't parse multipart from unauthorized requests.
+const adminGuard = [protect, authorized("admin", "superAdmin")];
+
+categoryRouter.post("/create",   ...adminGuard, uploadSingle("image"), create);
+categoryRouter.get("/",          read);
+categoryRouter.get("/:id",       readById);
+categoryRouter.patch("/status-update/:id", ...adminGuard, status);
+categoryRouter.delete("/delete/:id",       ...adminGuard, deleteById);
+categoryRouter.put("/update/:id", ...adminGuard, uploadSingle("image"), update);
 
 module.exports = categoryRouter;

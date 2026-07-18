@@ -60,8 +60,15 @@ const verifyEmail = async (req, res) => {
         user.otpExpire = undefined;
         await user.save();
 
-        // Auto-login: generate token so frontend can skip the login step
+        // Auto-login: generate token + set cookie so Header (server-side) picks it up
         const token = generateToken(user._id);
+
+        res.cookie('jwt', token, {
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none',
+        });
 
         return sendSuccess(res, "Email verified Successfully", {
             id:    user._id,
