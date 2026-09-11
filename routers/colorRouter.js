@@ -1,14 +1,14 @@
 const colorRouter = require("express").Router()
-const { create, read, getById, status, deleteById, update 
-   , readById
-} = require("../controllers/colorController")
+const { create, read, status, deleteById, update, readById } = require("../controllers/colorController")
+const { protect, authorized } = require("../middleware/auth")
 
-colorRouter.post("/create", create)
+const adminGuard = [protect, authorized("admin", "superAdmin")]
+
+colorRouter.post("/create", ...adminGuard, create)
 colorRouter.get("/", read)
 colorRouter.get("/:id", readById)
-colorRouter.get("/:id", getById)
-colorRouter.patch("/status-update/:id", status)
-colorRouter.delete("/delete/:id", deleteById)
-colorRouter.put("/update/:id", update)
+colorRouter.patch("/status-update/:id", ...adminGuard, status)
+colorRouter.delete("/delete/:id", ...adminGuard, deleteById)
+colorRouter.put("/update/:id", ...adminGuard, update)
 
 module.exports = colorRouter;

@@ -18,6 +18,10 @@ const brandSchema = new mongoose.Schema({
         type:String,
         default:null
     },
+    cloudinary_id:{
+        type:String,
+        default:null
+    },
     status:{
         type:Boolean,
         default:false

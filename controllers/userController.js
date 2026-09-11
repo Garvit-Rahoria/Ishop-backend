@@ -6,6 +6,15 @@ const userModel = require("../models/userModel");
 const { sendBadRequest, sendCreated, sendNotFound, sendServerError, sendConflict, sendSuccess, sendOk } = require("../utils/response");
 const generateToken = require('../utils/generateOtp');
 
+const isProd = process.env.NODE_ENV === "production";
+const authCookieOptions = {
+    httpOnly: true,
+    // localhost HTTP pe secure cookies set nahi hote
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/",
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
+};
 const register = async (req, res) => {
     try {
         const { name, email, password } = req.body;
@@ -63,12 +72,7 @@ const verifyEmail = async (req, res) => {
         // Auto-login: generate token + set cookie so Header (server-side) picks it up
         const token = generateToken(user._id);
 
-        res.cookie('jwt', token, {
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-        });
+        res.cookie('jwt', token, authCookieOptions);
 
         return sendSuccess(res, "Email verified Successfully", {
             id:    user._id,
@@ -104,37 +108,55 @@ const resetOtp = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        if (!email || !password) {
-            return sendBadRequest(res, "email and password are required");
+        const { email, password, username } = req.body;
+        const identifier = String(email || username || "").trim();
+
+        if (!identifier || !password) {
+            return sendBadRequest(res, "email/username and password are required");
         }
-        const user = await userModel.findOne({ email });
+
+        let user = null;
+
+        // Allow admin portal login with username "Admin"
+        if (identifier.toLowerCase() === "admin") {
+            user = await userModel.findOne({
+                $or: [
+                    { name: /^Admin$/i },
+                    { email: "admin@swoo.com" },
+                    { email: "admin" },
+                ],
+            });
+        }
+
+        if (!user) {
+            user = await userModel.findOne({ email: identifier.toLowerCase() });
+        }
+
         if (!user || user.isVerified === false) {
             return sendBadRequest(res, "User not found");
         }
 
         const decryptedPass = Cryptr.decrypt(user.password);
         if (decryptedPass !== password) {
-            return sendBadRequest(res, "Wrong Password")
+            return sendBadRequest(res, "Wrong Password");
         }
-        const token = generateToken(user._id)
 
-        res.cookie('jwt', token, {
-            maxAge: 30 * 24 * 60 * 60 * 1000,  // 30d
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none'
+        const token = generateToken(user._id);
+        res.cookie("jwt", token, authCookieOptions);
+
+        return sendSuccess(res, "User Login Successfully!", {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            token,
         });
-
-
-        return sendSuccess(res, "User Login Successfully!", { id: user._id, name: user.name, email: user.email, token });
-
     } catch (error) {
-        const message = error?.message || "Internal Server Error"
-        sendServerError(res, message)
-        console.log(error, message)
+        const message = error?.message || "Internal Server Error";
+        sendServerError(res, message);
+        console.log(error, message);
     }
-}
+};
 const getMe = async (req, res) => {
     try {
         res.status(200).json({
@@ -152,8 +174,9 @@ const logout = async (req, res) => {
 
         res.clearCookie("jwt", {
             httpOnly: true,
-            secure: true,
-            sameSite: "none"
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
+            path: "/",
         });
 
         return sendSuccess(res, "User Logout Successfully!");
@@ -169,41 +192,58 @@ const logout = async (req, res) => {
 
 const addAddress = async (req, res) => {
     try {
+        const userId = req.user._id;
+        const {
+            fullName,
+            mobile,
+            pincode,
+            addressLine,
+            city,
+            state,
+            country = "India",
+        } = req.body;
 
-        
-        const userId = req.user._id
+        if (!fullName || !mobile || !pincode || !addressLine || !city || !state) {
+            return res.status(400).json({
+                success: false,
+                message: "All address fields are required",
+            });
+        }
 
-
-        const { fullName, mobile, pincode, addressLine, city, state, country } = req.body
-        const user = await userModel.findById({ _id: userId })
-        console.log(fullName, mobile, pincode, addressLine, city, state, country)
-
+        const user = await userModel.findById(userId);
         if (!user) {
             return res.status(404).json({
                 message: "User not found",
-                success: false
-            })
+                success: false,
+            });
         }
+
         user.addresses.push({
-            fullName, mobile, pincode, addressLine, city, state, country
-        })
+            fullName,
+            mobile,
+            pincode,
+            addressLine,
+            city,
+            state,
+            country: country || "India",
+        });
 
+        await user.save();
 
-        await user.save()
-        res.status(200).json({
-            message: "Address Addedd Successfully",
+        return res.status(200).json({
+            message: "Address Added Successfully",
             success: true,
-            addresses: user.addresses
-        })
-        console.log(req.user)
+            addresses: user.addresses,
+            addAddress: user.addresses,
+        });
     } catch (error) {
-        console.log(error)
-        res.status(500).json({
+        console.log(error);
+        return res.status(500).json({
             success: false,
-            message: error.message
-        })
+            message: error.message,
+        });
     }
-}
+};
 
 
 // const updateProfile = async (req, res) => {

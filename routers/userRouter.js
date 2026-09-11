@@ -1,5 +1,5 @@
 const userRouter = require("express").Router()
-const { register, verifyEmail, resetOtp, login, getMe,logout,addAddress,updateProfile } = require("../controllers/userController")
+const { register, verifyEmail, resetOtp, login, getMe, logout, addAddress } = require("../controllers/userController")
 const { protect } = require("../middleware/auth")
 
 userRouter.post("/register", register)

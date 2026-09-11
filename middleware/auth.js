@@ -5,20 +5,17 @@ const protect = async (req, res, next) => {
     try {
         let token = null;
 
-         // Get token from cookies
-        if (req.cookies && req.cookies.jwt) {
-            token = req.cookies.jwt;
+        // Prefer Authorization (localStorage Bearer) over cookie —
+        // stale cookies from another login must not override a fresh admin token
+        const authHeader = req.headers.authorization;
+        if (authHeader) {
+            token = authHeader.startsWith("Bearer ")
+                ? authHeader.slice(7)
+                : authHeader;
         }
 
-       
-        if (!token) {
-            const authHeader = req.headers.authorization;
-            if (authHeader) {
-                // Support both "Bearer <token>" and raw token
-                token = authHeader.startsWith("Bearer ")
-                    ? authHeader.slice(7)
-                    : authHeader;
-            }
+        if (!token && req.cookies && req.cookies.jwt) {
+            token = req.cookies.jwt;
         }
 
         if (!token) {

@@ -1,5 +1,4 @@
 const colorModel = require("../models/colorModel");
-const colorRouter = require("../routers/colorRouter");
 const { sendBadRequest, sendCreated, sendNotFound, sendServerError, sendConflict, sendSuccess, sendOk } = require("../utils/response")
 
 const create = async (req, res) => {
@@ -47,7 +46,7 @@ const readById = async (req, res) => {
         const color = await colorModel.findById(id);
         if (color) {
             return sendSuccess(res, "Color Find", color, {
-                imageBaseUrl: "http://localhost:5000/color"
+                imageBaseUrl: "http://127.0.0.1:5000/color"
             })
         }
     } catch (error) {
@@ -96,6 +95,7 @@ const getById = async (req, res) => {
 const status = async (req, res) => {
     try {
         const { field } = req.body;
+        if (field !== "status") return sendBadRequest(res, "Invalid status field");
         const id = req.params.id;
         const color = await colorModel.findById(id);
         if (!color) return sendNotFound(res);

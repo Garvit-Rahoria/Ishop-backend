@@ -1,6 +1,7 @@
 const cartModel = require("../models/cartModel");
 const orderModel = require("../models/orderModel");
 const userModel = require("../models/userModel");
+require("../models/productModel"); // needed for populate("items.product_id")
 const { sendServerError, sendSuccess } = require("../utils/response");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
@@ -188,7 +189,7 @@ const getAllOrders = async (req, res) => {
 // ─── Admin: Update Order Status ──────────────────────────────────────────────
 const updateOrderStatus = async (req, res) => {
     try {
-        const { orderId } = req.params;
+        const orderId = req.params.id;
         const { status } = req.body;
 
         const validStatus = [
@@ -269,6 +270,25 @@ const returnOrder = async (req, res) => {
     }
 };
 
+// ─── User: My Orders ─────────────────────────────────────────────────────────
+const getMyOrders = async (req, res) => {
+    try {
+        const orders = await orderModel
+            .find({ user: req.user._id })
+            .populate("items.product_id", "name final_price thumbnail slug")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            data: orders,
+            count: orders.length,
+        });
+    } catch (error) {
+        console.error("getMyOrders error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     createOrder,
     verifyPayment,
@@ -277,4 +297,5 @@ module.exports = {
     getSingleOrder,
     cancelOrder,
     returnOrder,
+    getMyOrders,
 };

@@ -1,4 +1,5 @@
 require('dotenv').config()
+const path = require("path")
 const express = require("express")
 const cors = require("cors")
 const cookieParser = require('cookie-parser')
@@ -20,6 +21,8 @@ const rawOrigins = [
 const allowedOrigins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
     ...rawOrigins
         .split(",")
         .map((o) => o.trim().replace(/\/+$/, ""))
@@ -60,7 +63,8 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
 app.use(cookieParser())
-app.use(express.static("public"))
+// Absolute path so uploads work even if process cwd differs (Docker / watch / OneDrive)
+app.use(express.static(path.join(__dirname, "public")))
 app.use(express.json())
 
 app.use("/api/category", require("./routers/categoryRouter"))
@@ -70,6 +74,8 @@ app.use("/api/product",  require("./routers/productRouter"))
 app.use("/api/user",     require("./routers/userRouter"))
 app.use("/api/cart",     require("./routers/cartRouter"))
 app.use("/api/order",    require("./routers/orderRouter"))
+app.use("/api/dashboard", require("./routers/dashboardRouter"))
+app.use("/api/contact",  require("./routers/contactRouter"))
 
 // Health check
 app.get("/", (req, res) => {

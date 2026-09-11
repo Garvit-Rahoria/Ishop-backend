@@ -1,22 +1,32 @@
 const cartModel = require("../models/cartModel");
 
-
 const syncCart = async (req, res) => {
     try {
         const userId = req.user._id;
-        const localCart = JSON.parse(req.body.localCart) || [];
+        let localCart = [];
+
+        try {
+            const raw = req.body.localCart;
+            localCart = typeof raw === "string" ? JSON.parse(raw || "[]") : (raw || []);
+            if (!Array.isArray(localCart)) localCart = [];
+        } catch (_) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid localCart payload",
+            });
+        }
 
         if (localCart.length === 0) {
             const userCart = await cartModel.findOne({ userId }).populate({
                 path: "items.productId",
-                select: "name _id orginal_price final_price discount_percentage price thumbnail"
+                select: "name _id orginal_price final_price discount_percentage price thumbnail stock"
             });
 
             return res.status(200).json({
                 message: "Fetched cart from server",
                 success: true,
                 cart: userCart ? userCart.items : [],
-                imageBaseUrl: process.env.PRODUCT_IMAGE_BASE_URL || `${process.env.BACKEND_URL || ''}/product`
+                imageBaseUrl: ""
             });
         }
 
@@ -26,47 +36,54 @@ const syncCart = async (req, res) => {
                 select: "name _id orginal_price final_price discount_percentage price thumbnail stock"
             });
 
-        // if no cart -> create new
         if (!userCart) {
             userCart = new cartModel({
                 userId,
                 items: []
             });
-            
         }
 
-        // Merge local cart into DB cart
         localCart.forEach((cartItem) => {
             const { id, qty } = cartItem;
-            const existingItem = userCart.items.find(
-                (item) => {
-                    return item.productId._id == id
-                }
-            )
+            if (!id || !qty || qty < 1) return;
+
+            const existingItem = userCart.items.find((item) => {
+                const pid = item.productId?._id || item.productId;
+                return String(pid) === String(id);
+            });
 
             if (existingItem) {
-                existingItem.qty += qty;
+                existingItem.qty += Number(qty) || 1;
             } else {
                 userCart.items.push({
                     productId: id,
-                    qty
+                    qty: Number(qty) || 1
                 });
             }
-        })
+        });
 
         await userCart.save();
 
-        res.status(200).json({
+        const populated = await cartModel.findOne({ userId }).populate({
+            path: "items.productId",
+            select: "name _id orginal_price final_price discount_percentage price thumbnail stock"
+        });
+
+        return res.status(200).json({
             message: "Cart synced Successfully!",
             success: true,
-            cart: userCart,
-            imageBaseUrl: process.env.PRODUCT_IMAGE_BASE_URL || `${process.env.BACKEND_URL || ''}/product`
+            cart: populated ? populated.items : [],
+            imageBaseUrl: ""
         });
 
     } catch (error) {
-        console.log(error)
+        console.error("syncCart error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to sync cart",
+        });
     }
-}
+};
 
 const addToCart = async (req, res) => {
     try {
@@ -77,7 +94,8 @@ const addToCart = async (req, res) => {
             return res.status(400).json({ success: false, message: "Product id is required" });
         }
 
-        // Find or create cart for this user
+        const safeQty = Math.max(1, Number(qty) || 1);
+
         let userCart = await cartModel.findOne({ userId });
 
         if (!userCart) {
@@ -89,9 +107,9 @@ const addToCart = async (req, res) => {
         );
 
         if (existingItem) {
-            existingItem.qty += qty;
+            existingItem.qty += safeQty;
         } else {
-            userCart.items.push({ productId: id, qty });
+            userCart.items.push({ productId: id, qty: safeQty });
         }
 
         await userCart.save();
@@ -107,5 +125,5 @@ const addToCart = async (req, res) => {
 };
 
 module.exports = {
-    syncCart,addToCart
-}
+    syncCart, addToCart
+};
