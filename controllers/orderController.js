@@ -33,16 +33,30 @@ const createOrder = async (req, res) => {
             if (!stock) {
                 throw new Error(`Product ${_id} is out of stock`);
             }
+
+            const price = Number(final_price);
+            const qty = Number(item.qty);
+            if (!Number.isFinite(price) || !Number.isFinite(qty) || price <= 0 || qty <= 0) {
+                throw new Error(`Invalid price or quantity for product ${_id}`);
+            }
+
             return {
                 product_id: _id,
-                qty: item.qty,
-                price: final_price,
-                total: final_price * item.qty,
+                qty,
+                price,
+                total: price * qty,
             };
         });
 
         // 3. Server-side total — never use frontend value
         const totalAmount = productDetails.reduce((sum, item) => sum + item.total, 0);
+
+        if (!Number.isFinite(totalAmount) || totalAmount < 1) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment amount must be at least ₹1. Please check the cart total.",
+            });
+        }
 
         if (!address || !address.fullName) {
             return res.status(400).json({ success: false, message: "Shipping address is required" });
@@ -83,9 +97,12 @@ const createOrder = async (req, res) => {
                 // Razorpay order creation failed — delete the pending DB order
                 await orderModel.findByIdAndDelete(order._id);
                 console.error("Razorpay order creation failed:", rzpErr);
+                const gatewayMessage = rzpErr?.error?.description || rzpErr?.message;
                 return res.status(502).json({
                     success: false,
-                    message: "Payment gateway error. Please try again.",
+                    message: gatewayMessage
+                        ? `Payment gateway error: ${gatewayMessage}`
+                        : "Payment gateway error. Please try again.",
                 });
             }
 
