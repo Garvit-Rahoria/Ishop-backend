@@ -1,4 +1,5 @@
 const categoryModel = require("../models/categoryModel");
+const productModel = require("../models/productModel");
 const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/cloudinary");
 const {
     sendBadRequest, sendCreated, sendNotFound,
@@ -37,13 +38,30 @@ const read = async (req, res) => {
         if (query.is_popular) filter.is_popular = query.is_popular === "true";
         if (query.id)         filter._id        = query.id;
 
-        const [category, count] = await Promise.all([
-            categoryModel.find(filter).limit(limit),
+        const [categories, totalCategories] = await Promise.all([
+            categoryModel.find(filter).limit(limit).lean(),
             categoryModel.countDocuments(),
         ]);
 
+        // Compute product counts for each category
+        const categoryIds = categories.map((c) => c._id);
+        const productCounts = await productModel.aggregate([
+            { $match: { categoryId: { $in: categoryIds }, status: true } },
+            { $group: { _id: "$categoryId", total: { $sum: 1 } } },
+        ]);
+
+        const countMap = {};
+        productCounts.forEach((item) => {
+            countMap[String(item._id)] = item.total;
+        });
+
+        const categoryData = categories.map((c) => ({
+            ...c,
+            count: countMap[String(c._id)] || 0,
+        }));
+
         // imageBaseUrl is empty — full Cloudinary URLs are already stored in category.image
-        return sendSuccess(res, "Category Find", category, { total: count, imageBaseUrl: "" });
+        return sendSuccess(res, "Category Find", categoryData, { total: totalCategories, imageBaseUrl: "" });
     } catch (error) {
         console.error("category read error:", error);
         return sendServerError(res);

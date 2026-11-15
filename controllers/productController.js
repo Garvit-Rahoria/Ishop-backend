@@ -249,7 +249,7 @@ const update = async (req, res) => {
 };
 
 // ─── Status Toggle ────────────────────────────────────────────────────────────
-const ALLOWED_STATUS_FIELDS = new Set(["status", "stock", "top_selling"]);
+const ALLOWED_STATUS_FIELDS = new Set(["status", "stock", "top_selling", "is_top"]);
 
 const status = async (req, res) => {
     try {
@@ -261,7 +261,8 @@ const status = async (req, res) => {
         const product = await productModel.findById(id);
         if (!product) return sendNotFound(res);
 
-        await productModel.findByIdAndUpdate(id, { $set: { [field]: !product[field] } });
+        const targetField = field === "is_top" ? "top_selling" : field;
+        await productModel.findByIdAndUpdate(id, { $set: { [targetField]: !product[targetField] } });
         return sendSuccess(res, `${field} Updated successfully`);
     } catch (error) {
         console.error("product status error:", error);

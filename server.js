@@ -31,13 +31,20 @@ const allowedOrigins = [
 
 console.log("✅ Allowed CORS origins:", allowedOrigins);
 
+const isAllowedOrigin = (origin) => {
+    if (!origin) return true;
+    const normalized = origin.trim().replace(/\/+$/, "");
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) return true;
+    return allowedOrigins.includes(normalized);
+};
+
 const corsOptions = {
     origin: (origin, callback) => {
         const normalizedOrigin = origin ? origin.trim().replace(/\/+$/, "") : undefined;
         // Allow server-to-server / Postman / health-check (no Origin header)
         if (!normalizedOrigin) return callback(null, true);
 
-        if (allowedOrigins.includes(normalizedOrigin)) {
+        if (isAllowedOrigin(normalizedOrigin)) {
             return callback(null, true);
         }
 
@@ -89,7 +96,7 @@ app.get("/", (req, res) => {
 app.use((err, req, res, next) => {
     const origin = req.headers.origin;
     const normalizedOrigin = origin ? origin.trim().replace(/\/+$/, "") : undefined;
-    if (normalizedOrigin && allowedOrigins.includes(normalizedOrigin)) {
+    if (normalizedOrigin && isAllowedOrigin(normalizedOrigin)) {
         res.setHeader("Access-Control-Allow-Origin", normalizedOrigin);
         res.setHeader("Access-Control-Allow-Credentials", "true");
     }

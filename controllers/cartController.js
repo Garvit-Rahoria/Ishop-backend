@@ -1,4 +1,24 @@
+const mongoose = require("mongoose");
 const cartModel = require("../models/cartModel");
+const productModel = require("../models/productModel");
+
+// Safely resolve any identifier (ObjectId hex string, slug, or name) to a valid ObjectId
+const resolveToObjectId = async (val) => {
+    if (!val) return null;
+    const str = String(val).trim();
+    if (mongoose.Types.ObjectId.isValid(str) && /^[0-9a-fA-F]{24}$/.test(str)) {
+        return new mongoose.Types.ObjectId(str);
+    }
+    try {
+        const prod = await productModel.findOne({
+            $or: [{ slug: str }, { name: str }]
+        }).select("_id");
+        return prod ? prod._id : null;
+    } catch (err) {
+        console.warn("resolveToObjectId lookup failed for:", str, err.message);
+        return null;
+    }
+};
 
 const syncCart = async (req, res) => {
     try {
@@ -30,11 +50,7 @@ const syncCart = async (req, res) => {
             });
         }
 
-        let userCart = await cartModel.findOne({ userId })
-            .populate({
-                path: "items.productId",
-                select: "name _id orginal_price final_price discount_percentage price thumbnail stock"
-            });
+        let userCart = await cartModel.findOne({ userId });
 
         if (!userCart) {
             userCart = new cartModel({
@@ -43,16 +59,21 @@ const syncCart = async (req, res) => {
             });
         }
 
-        // Checkout sends replace=true because the browser cart is the source
-        // of truth. Without this, every checkout added the same quantities to
-        // the existing DB cart and inflated the Razorpay amount.
+        // Checkout sends replace=true because browser cart is the source of truth
         if (req.body.replace === true) {
-            userCart.items = localCart
-                .map(({ id, qty }) => ({
-                    productId: id,
-                    qty: Math.max(1, Number(qty) || 1),
-                }))
-                .filter((item) => item.productId);
+            const resolvedItems = [];
+            for (const item of localCart) {
+                const rawId = item.id || item.productId || item._id;
+                const pid = await resolveToObjectId(rawId);
+                if (pid) {
+                    resolvedItems.push({
+                        productId: pid,
+                        qty: Math.max(1, Number(item.qty) || 1),
+                    });
+                }
+            }
+
+            userCart.items = resolvedItems;
             await userCart.save();
 
             const replaced = await cartModel.findOne({ userId }).populate({
@@ -68,24 +89,27 @@ const syncCart = async (req, res) => {
             });
         }
 
-        localCart.forEach((cartItem) => {
-            const { id, qty } = cartItem;
-            if (!id || !qty || qty < 1) return;
+        // Incremental sync
+        for (const cartItem of localCart) {
+            const rawId = cartItem.id || cartItem.productId || cartItem._id;
+            const pid = await resolveToObjectId(rawId);
+            const qty = Number(cartItem.qty) || 1;
+            if (!pid || qty < 1) continue;
 
             const existingItem = userCart.items.find((item) => {
-                const pid = item.productId?._id || item.productId;
-                return String(pid) === String(id);
+                const currentPid = item.productId?._id || item.productId;
+                return String(currentPid) === String(pid);
             });
 
             if (existingItem) {
-                existingItem.qty += Number(qty) || 1;
+                existingItem.qty += qty;
             } else {
                 userCart.items.push({
-                    productId: id,
-                    qty: Number(qty) || 1
+                    productId: pid,
+                    qty,
                 });
             }
-        });
+        }
 
         await userCart.save();
 
@@ -119,6 +143,11 @@ const addToCart = async (req, res) => {
             return res.status(400).json({ success: false, message: "Product id is required" });
         }
 
+        const pid = await resolveToObjectId(id);
+        if (!pid) {
+            return res.status(404).json({ success: false, message: "Product not found" });
+        }
+
         const safeQty = Math.max(1, Number(qty) || 1);
 
         let userCart = await cartModel.findOne({ userId });
@@ -127,14 +156,15 @@ const addToCart = async (req, res) => {
             userCart = new cartModel({ userId, items: [] });
         }
 
-        const existingItem = userCart.items.find(
-            (item) => item.productId.toString() === id.toString()
-        );
+        const existingItem = userCart.items.find((item) => {
+            const currentPid = item.productId?._id || item.productId;
+            return String(currentPid) === String(pid);
+        });
 
         if (existingItem) {
             existingItem.qty += safeQty;
         } else {
-            userCart.items.push({ productId: id, qty: safeQty });
+            userCart.items.push({ productId: pid, qty: safeQty });
         }
 
         await userCart.save();

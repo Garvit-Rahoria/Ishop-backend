@@ -28,7 +28,7 @@ const createOrder = async (req, res) => {
         }
 
         // 2. Build product details + validate stock
-        const productDetails = userCart.items.map((item) => {
+        const productDetails = userCart.items.filter((item) => item.productId).map((item) => {
             const { _id, final_price, stock } = item.productId;
             if (!stock) {
                 throw new Error(`Product ${_id} is out of stock`);
@@ -152,6 +152,11 @@ const verifyPayment = async (req, res) => {
         if (!order) {
             return res.status(404).json({ success: false, message: "Order not found" });
         }
+        const isOwner = order.user && (order.user._id || order.user).toString() === req.user._id.toString();
+        const isAdmin = ["admin", "superAdmin"].includes(req.user.role);
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: "Not authorized to access this order" });
+        }
 
         // 3. Idempotency — already verified, return success without re-processing
         if (order.paymentStatus === "paid") {
@@ -222,6 +227,11 @@ const updateOrderStatus = async (req, res) => {
         if (!order) {
             return res.status(404).json({ success: false, message: "Order not found" });
         }
+        const isOwner = order.user && (order.user._id || order.user).toString() === req.user._id.toString();
+        const isAdmin = ["admin", "superAdmin"].includes(req.user.role);
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: "Not authorized to access this order" });
+        }
 
         order.orderStatus = status;
         if (status === "delivered") order.deliveredAt = new Date();
@@ -245,6 +255,11 @@ const getSingleOrder = async (req, res) => {
         if (!order) {
             return res.status(404).json({ success: false, message: "Order not found" });
         }
+        const isOwner = order.user && (order.user._id || order.user).toString() === req.user._id.toString();
+        const isAdmin = ["admin", "superAdmin"].includes(req.user.role);
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: "Not authorized to access this order" });
+        }
         return res.status(200).json({ success: true, order });
     } catch (error) {
         return res.status(500).json({ success: false, message: error.message });
@@ -257,6 +272,11 @@ const cancelOrder = async (req, res) => {
         const order = await orderModel.findById(req.params.id);
         if (!order) {
             return res.status(404).json({ success: false, message: "Order not found" });
+        }
+        const isOwner = order.user && (order.user._id || order.user).toString() === req.user._id.toString();
+        const isAdmin = ["admin", "superAdmin"].includes(req.user.role);
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: "Not authorized to access this order" });
         }
         if (order.orderStatus === "delivered") {
             return res.status(400).json({ success: false, message: "Cannot cancel a delivered order" });
@@ -275,6 +295,11 @@ const returnOrder = async (req, res) => {
         const order = await orderModel.findById(req.params.id);
         if (!order) {
             return res.status(404).json({ success: false, message: "Order not found" });
+        }
+        const isOwner = order.user && (order.user._id || order.user).toString() === req.user._id.toString();
+        const isAdmin = ["admin", "superAdmin"].includes(req.user.role);
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: "Not authorized to access this order" });
         }
         if (order.orderStatus !== "delivered") {
             return res.status(400).json({ success: false, message: "Only delivered orders can be returned" });
@@ -306,6 +331,20 @@ const getMyOrders = async (req, res) => {
     }
 };
 
+// ─── Admin: Delete Order ─────────────────────────────────────────────────────
+const deleteOrder = async (req, res) => {
+    try {
+        const order = await orderModel.findByIdAndDelete(req.params.id);
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Order not found" });
+        }
+        return res.status(200).json({ success: true, message: "Order deleted successfully" });
+    } catch (error) {
+        console.error("deleteOrder error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     createOrder,
     verifyPayment,
@@ -315,4 +354,5 @@ module.exports = {
     cancelOrder,
     returnOrder,
     getMyOrders,
+    deleteOrder,
 };

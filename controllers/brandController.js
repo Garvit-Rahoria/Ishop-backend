@@ -1,4 +1,5 @@
 const brandModel = require("../models/brandModel");
+const productModel = require("../models/productModel");
 const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/cloudinary");
 const {
     sendBadRequest, sendCreated, sendNotFound,
@@ -9,8 +10,8 @@ const create = async (req, res) => {
     try {
         const { name, slug, categoryId } = req.body;
 
-        if (!name || !slug || !req.file || !categoryId) {
-            return sendBadRequest(res, "name, slug, categoryId and image are required");
+        if (!name || !slug || !req.file) {
+            return sendBadRequest(res, "name, slug and image are required");
         }
 
         const existing = await brandModel.findOne({ name });
@@ -18,12 +19,21 @@ const create = async (req, res) => {
 
         const { secure_url, public_id } = await uploadToCloudinary(req.file.buffer, "ishop/brand");
 
+        let parsedCategories = [];
+        if (categoryId) {
+            try {
+                parsedCategories = typeof categoryId === "string" ? JSON.parse(categoryId) : categoryId;
+            } catch (e) {
+                parsedCategories = [];
+            }
+        }
+
         await brandModel.create({
             name,
             slug,
             image:        secure_url,
             cloudinary_id: public_id,
-            categoryId:   JSON.parse(categoryId),
+            categoryId:   parsedCategories,
         });
 
         return sendCreated(res);
@@ -45,12 +55,29 @@ const read = async (req, res) => {
         if (query.is_popular) filter.is_popular = query.is_popular === "true";
         if (query.id)         filter._id        = query.id;
 
-        const [brand, count] = await Promise.all([
-            brandModel.find(filter).limit(limit).populate("categoryId"),
+        const [brands, totalBrands] = await Promise.all([
+            brandModel.find(filter).limit(limit).populate("categoryId").lean(),
             brandModel.countDocuments(),
         ]);
 
-        return sendSuccess(res, "Brand Find", brand, { total: count, imageBaseUrl: "" });
+        // Compute product counts for each brand
+        const brandIds = brands.map((b) => b._id);
+        const productCounts = await productModel.aggregate([
+            { $match: { brandId: { $in: brandIds }, status: true } },
+            { $group: { _id: "$brandId", total: { $sum: 1 } } },
+        ]);
+
+        const countMap = {};
+        productCounts.forEach((item) => {
+            countMap[String(item._id)] = item.total;
+        });
+
+        const brandData = brands.map((b) => ({
+            ...b,
+            count: countMap[String(b._id)] || 0,
+        }));
+
+        return sendSuccess(res, "Brand Find", brandData, { total: totalBrands, imageBaseUrl: "" });
     } catch (error) {
         console.error("brand read error:", error);
         return sendServerError(res);
