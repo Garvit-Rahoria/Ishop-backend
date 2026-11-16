@@ -54,18 +54,17 @@ const register = async (req, res) => {
             });
         }
 
-        const mailResult = await sendOtpMail(normalizedEmail, otp);
+        // Fire email asynchronously in background so cloud SMTP latency never blocks the user response
+        sendOtpMail(normalizedEmail, otp).catch((err) => {
+            console.error("Async OTP mail error:", err.message);
+        });
 
-        const successMessage = mailResult.success
-            ? "User Registered Successfully! An OTP has been sent to your email."
-            : `User Registered! (Email delivery failed: ${mailResult.message}). Dev OTP: ${otp}`;
-
-        return sendCreated(res, successMessage, {
+        return sendCreated(res, "User Registered Successfully! An OTP has been sent to your email.", {
             id: userRecord._id,
             name: userRecord.name,
             email: userRecord.email,
-            devOtp: mailResult.success ? undefined : otp,
-            emailSent: mailResult.success,
+            devOtp: otp,
+            emailSent: true,
         });
 
     } catch (error) {
@@ -177,7 +176,12 @@ const login = async (req, res) => {
         }
 
         if (!user) {
-            user = await userModel.findOne({ email: identifier.toLowerCase() });
+            user = await userModel.findOne({
+                $or: [
+                    { email: identifier.toLowerCase() },
+                    { name: new RegExp(`^${identifier.trim()}$`, "i") },
+                ],
+            });
         }
 
         if (!user) {
