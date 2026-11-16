@@ -26,6 +26,9 @@ const sendOtpMail = async (toEmail, otp) => {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS,
             },
+            connectionTimeout: 5000,
+            greetingTimeout: 4000,
+            socketTimeout: 6000,
         });
 
         const mailOptions = {
@@ -56,7 +59,14 @@ const sendOtpMail = async (toEmail, otp) => {
             `,
         };
 
-        const info = await transporter.sendMail(mailOptions);
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("SMTP send timeout (8s limit)")), 8000)
+        );
+
+        const info = await Promise.race([
+            transporter.sendMail(mailOptions),
+            timeoutPromise,
+        ]);
         console.log("✅ OTP Email sent successfully! Message ID:", info.messageId);
         return {
             success: true,

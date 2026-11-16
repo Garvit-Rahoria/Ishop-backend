@@ -16,10 +16,11 @@ const sendOk = (res, message = "Send Ok") =>{
 }
 
 // created response 
-const sendCreated = (res, message = "Created Successfully") =>{
+const sendCreated = (res, message = "Created Successfully", data = {}) =>{
     return res.status(201).json({
         success:true,
-        message
+        message,
+        data
     })
 }
 
