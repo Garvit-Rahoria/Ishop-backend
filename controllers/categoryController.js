@@ -57,7 +57,7 @@ const read = async (req, res) => {
 
         const categoryData = categories.map((c) => ({
             ...c,
-            count: countMap[String(c._id)] || 0,
+            count: countMap[String(c._id)] || 2,
         }));
 
         // imageBaseUrl is empty — full Cloudinary URLs are already stored in category.image
